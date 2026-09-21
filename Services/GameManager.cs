@@ -28,6 +28,7 @@ namespace QuiverLauncher.Services
         private Task? _catalogInitialization;
 
         public Func<Action, Task>? UiThreadInvoker { get; set; }
+        public bool HasLoadedLibrary { get; private set; }
 
         private async Task RunOnUiThreadAsync(Action action)
         {
@@ -252,12 +253,11 @@ namespace QuiverLauncher.Services
         {
             // Keep the same app instances and collection while online results arrive.
             var apps = _catalogApps.ToArray();
+            await new LibraryUpdateChecker(_httpClient, _settingsStore.Current).CheckStartupAsync(apps, cancellationToken);
             await Task.WhenAll(apps.Select(async app =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                await app.CheckLatestVersionAsync(_httpClient, cancellationToken: cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                await app.LoadAndCacheDefaultIconAsync(_cacheFolder, app.GetReleaseApiToken(_settingsStore.Current));
+                await app.LoadAndCacheDefaultIconAsync(_cacheFolder, app.GetReleaseApiToken(_settingsStore.Current), cancellationToken: cancellationToken);
             }));
         }
 
@@ -340,7 +340,9 @@ namespace QuiverLauncher.Services
                 {
                     try
                     {
-                        await app.CheckStatusAsync(_httpClient, _appsFolder, forceUpdateCheck, checkRemoteVersion: allowNetwork);
+                        await GameStatusService.CheckStatusAsync(app, _httpClient, _appsFolder, forceUpdateCheck,
+                            checkRemoteVersion: allowNetwork, applyCachedRelease: allowNetwork);
+                        if (!allowNetwork) StartupVersionResolver.Apply(app, _settings);
                     }
                     catch (Exception ex)
                     {
@@ -356,6 +358,13 @@ namespace QuiverLauncher.Services
             }
 
             await RebuildVisibleGamesAsync(_settings);
+
+            // The local collection is ready; artwork and online metadata must not extend startup loading UI.
+            await RunOnUiThreadAsync(() =>
+            {
+                HasLoadedLibrary = true;
+                OnPropertyChanged(nameof(HasLoadedLibrary));
+            });
 
             await LoadCustomAndCachedIconsAsync(allowDownload: allowNetwork);
         }

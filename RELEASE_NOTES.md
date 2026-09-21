@@ -1,30 +1,21 @@
-# Quiver Launcher 3.4.4
+# Quiver Launcher 3.4.5
 
-## Library protection and recovery
+## More reliable startup version checks
 
-- Protect the critical `apps.json` library file with fail-closed reads: corrupt, incomplete, inaccessible, or malformed data is never treated as an empty library and is never overwritten during startup.
-- Keep immutable, verified library snapshots in `Backups/apps` before changes, with recovery instructions for restoring a saved library.
-- Bound library and update backup storage with automatic retention limits while always keeping the newest complete snapshot.
-- Back up `apps.json` and `settings.json` in a dated `Backups/updates` folder before desktop or Android launcher updates. Update handoff stops if either backup cannot be completed.
+- Show saved latest-version information as your library loads. Versions awaiting verification stay visible with **(pending check)** instead of going blank; the hint clears after a successful check.
+- Use the shared platform index from enabled catalog sources to refresh version information for matching apps, including manually added repositories. Only apps without matching information verified within the last 24 hours need an individual repository check at startup.
+- Preserve preferred release selections and use the most recently verified information. Downloads still fetch release details when needed.
+- Check library versions independently of catalog-list refreshes, so a slow or unavailable catalog does not stop library checks. Allow up to five seconds for the shared index before falling back to repositories.
+- Retry temporary connection, timeout, and server failures once, checking only the affected apps. Manual update checks still contact repositories directly; scheduled checks keep their existing behavior.
 
-## Library and App Catalog
+## Library loading and app actions
 
-- Preserve your scroll position when returning to Quiver after using another window, even with a controller connected or keyboard navigation active. This applies to the Library, catalog sources, and catalog app lists and grids. Keyboard and controller navigation still bring the selected item into view.
-- Able to choose a release before installing a repository app using **Versions → Change Version**. Download the version you want without installing the latest release first.
-- Add a mouse-wheel scroll speed setting with 1×, 2×, 3× and 5× options for the Library and App Catalog.
+- Show an animated indicator and **Loading your library…** while the local library loads, then replace it with your apps without waiting for network refreshes.
+- Keep the loading animation on the render thread so it can continue while app cards are being prepared. Preserve the existing card loading and scrolling behavior.
+- Prioritize **Download**, **Update Now**, and **Change Version** over queued background release requests while respecting active requests and provider rate limits.
+- Preserve active download and installation states during startup checks, and cancel pending startup work when Quiver closes.
 
-## Update checks
+## Platform detection fixes
 
-- Make **Retry** recheck only apps whose checks failed, were rate limited, or did not finish. Successful results are retained, and each retry narrows to the remaining failures. Quiver's own update check is also skipped when it already succeeded; **Check for Updates** button still runs a full check.
-- Show app names and failure reasons in the update-check details, including unfinished checks. Add repository warning indicators to Library entries, with guidance for fixing repository and access problems.
-- Improve keyboard and controller navigation through the update-check controls and expandable details.
-
-## Android
-
-- Open the navigation drawer by swiping in from the left edge, with an opening animation and Android gesture handling to help the swipe reach Quiver.
-
-## Linux and installation fixes
-
-- Default new Linux catalog platform filters to both Linux and Windows so apps usable through Wine or Proton are included. Existing filter choices are preserved.
-- Avoid scanning Wine/Proton prefixes or following directory links while looking for game executables. Improve detection of native Linux executables and exclude launcher metadata and shared libraries.
-- Allow an incomplete installation to be downloaded again even when its saved version matches the requested release. Leftover version metadata no longer causes the download to be skipped when the application files are missing.
+- Exclude notices and source archives from platform detection and download choices. Files such as `KartPad-v0.5.0-notices.zip` no longer incorrectly imply Windows or Linux support.
+- Apply the fix to existing cached and published asset metadata without clearing caches. Ordinary app ZIP packages remain supported.

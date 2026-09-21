@@ -156,8 +156,21 @@ namespace QuiverLauncher.Models
         public bool ShowTruncatedPreferredVersion =>
             TruncateLibraryCardTitles && HasPreferredVersion;
 
-        public string LatestVersionLabel =>
+        private string? _lastKnownVersion;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsLatestVersionCached => string.IsNullOrWhiteSpace(LatestVersion) && !string.IsNullOrWhiteSpace(_lastKnownVersion);
+        public string LatestVersionLabel => IsLatestVersionCached ? $"Latest: {_lastKnownVersion} (pending check)" :
             string.IsNullOrWhiteSpace(LatestVersion) ? "Latest:" : $"Latest: {LatestVersion}";
+        public string? LatestVersionToolTip => IsLatestVersionCached
+            ? "Last known version. Verification is pending; this value may be out of date." : null;
+
+        internal void ApplyLastKnownVersion(string? version)
+        {
+            _lastKnownVersion = version;
+            DispatchPropertyChanged(nameof(IsLatestVersionCached));
+            DispatchPropertyChanged(nameof(LatestVersionLabel));
+            DispatchPropertyChanged(nameof(LatestVersionToolTip));
+        }
 
         public string PreferredVersionLabel =>
             string.IsNullOrWhiteSpace(PreferredVersion) ? "Preferred:" : $"Preferred: {PreferredVersion}";
@@ -637,6 +650,7 @@ namespace QuiverLauncher.Models
             get => _latestVersion;
             set
             {
+                if (_lastKnownVersion != null) ApplyLastKnownVersion(null);
                 if (_latestVersion != value)
                 {
                     _latestVersion = value;
@@ -651,6 +665,8 @@ namespace QuiverLauncher.Models
                     DispatchPropertyChanged();
                     DispatchPropertyChanged(nameof(StatusText));
                     DispatchPropertyChanged(nameof(LatestVersionLabel));
+                    DispatchPropertyChanged(nameof(IsLatestVersionCached));
+                    DispatchPropertyChanged(nameof(LatestVersionToolTip));
                     DispatchPropertyChanged(nameof(PreferredVersionLabel));
                     DispatchPropertyChanged(nameof(ShowWrappedPreferredVersion));
                     DispatchPropertyChanged(nameof(ShowTruncatedPreferredVersion));
@@ -1582,6 +1598,20 @@ namespace QuiverLauncher.Models
             _cachedRelease = release;
         }
 
+        internal void ApplyStartupVersion(StartupVersionEvidence evidence)
+        {
+            var fresh = evidence.IsFresh(DateTimeOffset.UtcNow);
+            _latestVersion = fresh ? evidence.Version : null;
+            _lastKnownVersion = fresh ? null : evidence.Version;
+            _cachedRelease = fresh ? evidence.Release : null;
+            // Do not use the LatestVersion setter: index evidence must not clear a preferred pin.
+            foreach (var property in new[] { nameof(LatestVersion), nameof(LatestVersionLabel), nameof(IsLatestVersionCached),
+                         nameof(LatestVersionToolTip), nameof(StatusText) })
+                DispatchPropertyChanged(property);
+            if (fresh) RepositoryCheckError = null;
+            RefreshInstalledStatus();
+        }
+
         internal void ApplyCatalogVersionHint(string version, string? preferredVersion)
         {
             // Browsing metadata is a label, not an authoritative release payload.
@@ -1670,6 +1700,7 @@ namespace QuiverLauncher.Models
 
         internal void RefreshInstalledStatus()
         {
+            if (Status is GameStatus.Downloading or GameStatus.Installing or GameStatus.Updating) return;
             if (ShouldSuggestUpdate())
                 Status = GameStatus.UpdateAvailable;
             else if (Status != GameStatus.Downloading && Status != GameStatus.Installing && !string.IsNullOrWhiteSpace(InstalledVersion))
@@ -1732,7 +1763,7 @@ namespace QuiverLauncher.Models
             }
         }
 
-        public async Task<GitHubReleaseFetchResult> FetchReleasesAsync(HttpClient httpClient)
+        public async Task<GitHubReleaseFetchResult> FetchReleasesAsync(HttpClient httpClient, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(Repository))
                 return new GitHubReleaseFetchResult();
@@ -1741,7 +1772,7 @@ namespace QuiverLauncher.Models
                 httpClient,
                 RepositorySource,
                 Repository,
-                GetReleaseApiToken()).ConfigureAwait(false);
+                GetReleaseApiToken(), cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         public async Task InstallReleaseAsync(HttpClient httpClient, string gamesFolder, AppSettings settings, GitHubRelease release, GitHubAsset selectedAsset)
         {

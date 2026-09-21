@@ -13,14 +13,17 @@ public sealed class LibraryViewModel : ObservableViewModel, IDisposable
     private GameInfo? _continue;
     private string _sortBy = "Name";
     private bool _closed;
+    private bool _initialLoading;
+    private bool _initialLoadFailed;
     public SettingsViewModel Settings { get; }
     public ObservableCollection<GameInfo> Games => _manager.Games;
     public ObservableCollection<TagDisplayFilterListItem> TagDisplayFilters { get; } = new();
     public string SortBy { get => _sortBy; set => Set(ref _sortBy, value); }
     public GameInfo? ContinueGameInfo { get => _continue; private set => Set(ref _continue, value); }
     public bool IsContinueVisible => ContinueGameInfo != null;
-    public bool IsLibraryEmpty => _manager.IsLibraryEmpty;
-    public bool HasNoSearchMatches => _manager.HasNoLibrarySearchMatches;
+    public bool IsInitialLoading => _initialLoading;
+    public bool IsLibraryEmpty => !_initialLoading && !_initialLoadFailed && _manager.IsLibraryEmpty;
+    public bool HasNoSearchMatches => !_initialLoading && !_initialLoadFailed && _manager.HasNoLibrarySearchMatches;
     public string SearchText => _manager.LibrarySearchText;
     public double CardPixelSize => PlatformCapabilities.IsMobile ? double.NaN : Settings.SlotSize;
 
@@ -32,7 +35,27 @@ public sealed class LibraryViewModel : ObservableViewModel, IDisposable
     }
     private void ManagerChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(GameManager.HasLoadedLibrary) && _manager.HasLoadedLibrary)
+        {
+            _initialLoading = false;
+            _initialLoadFailed = false;
+            Notify(null);
+        }
         if (e.PropertyName is nameof(GameManager.IsLibraryEmpty) or nameof(GameManager.HasNoLibrarySearchMatches) or nameof(GameManager.LibrarySearchText)) Notify(null);
+    }
+    internal void BeginInitialLoad()
+    {
+        if (_closed || _manager.HasLoadedLibrary || Games.Count > 0) return;
+        _initialLoading = true;
+        _initialLoadFailed = false;
+        Notify(null);
+    }
+    internal void FailInitialLoad()
+    {
+        if (_closed) return;
+        _initialLoading = false;
+        _initialLoadFailed = !_manager.HasLoadedLibrary;
+        Notify(null);
     }
     private void SettingsChanged(object? sender, PropertyChangedEventArgs e) => Notify(nameof(CardPixelSize));
     public void RefreshContinue()
@@ -103,6 +126,9 @@ public sealed class LibraryViewModel : ObservableViewModel, IDisposable
     {
         if (_closed) return;
         _closed = true;
+        _initialLoading = false;
+        _initialLoadFailed |= !_manager.HasLoadedLibrary;
+        Notify(nameof(IsInitialLoading));
         CancelSearch();
         _manager.PropertyChanged -= ManagerChanged;
         Settings.PropertyChanged -= SettingsChanged;

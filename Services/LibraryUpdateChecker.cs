@@ -7,7 +7,10 @@ using QuiverLauncher.Models;
 namespace QuiverLauncher.Services;
 
 public enum AppCheckOutcome { Successful, Failed, Cancelled, RateLimited }
-public sealed record AppCheckResult(string IdentityKey, AppCheckOutcome Outcome, string? AppName = null, string? Reason = null);
+public sealed record AppCheckResult(string IdentityKey, AppCheckOutcome Outcome, string? AppName = null, string? Reason = null)
+{
+    public bool CanRetry { get; init; }
+}
 public sealed record AppCheckProgress(int Completed, int Total, AppCheckResult? Result = null,
     IReadOnlyList<AppCheckResult>? Targets = null);
 public sealed record LibraryCheckResult(IReadOnlyList<AppCheckResult> Apps)
@@ -23,8 +26,25 @@ public sealed record LibraryCheckResult(IReadOnlyList<AppCheckResult> Apps)
 /// <summary>Metadata-only checks. A pass shares raw responses, never selected releases, between entries.</summary>
 public sealed class LibraryUpdateChecker(HttpClient client, AppSettings settings)
 {
+    internal async Task<LibraryCheckResult> CheckStartupAsync(IEnumerable<GameInfo> apps, CancellationToken token,
+        TimeSpan? retryDelay = null, TimeSpan? indexTimeout = null)
+    {
+        var all = apps.Where(app => !app.IsManuallyManaged && !string.IsNullOrWhiteSpace(app.Repository)).ToArray();
+        foreach (var app in all) StartupVersionResolver.Apply(app, settings);
+        await StartupVersionResolver.RefreshIndexAsync(client, settings, token, indexTimeout);
+        var targets = all.Where(app => !StartupVersionResolver.Apply(app, settings)).ToArray();
+        var resolved = all.Except(targets).Select(app => new AppCheckResult(app.InstanceKey, AppCheckOutcome.Successful, app.DisplayName));
+        var checkedApps = await CheckAsync(targets, true, TimeSpan.Zero, null, token, preservePreferredVersion: true);
+        var first = new LibraryCheckResult(resolved.Concat(checkedApps.Apps).ToArray());
+        var retryKeys = first.Apps.Where(a => a.CanRetry).Select(a => a.IdentityKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (retryKeys.Count == 0) return first;
+        await Task.Delay(retryDelay ?? TimeSpan.FromSeconds(5), token);
+        var retry = await CheckAsync(targets.Where(a => retryKeys.Contains(a.InstanceKey)), true, TimeSpan.Zero, null, token, preservePreferredVersion: true);
+        return new(first.Apps.Where(a => !retryKeys.Contains(a.IdentityKey)).Concat(retry.Apps).ToArray());
+    }
+
     public async Task<LibraryCheckResult> CheckAsync(IEnumerable<GameInfo> apps, bool force,
-        TimeSpan cacheAge, IProgress<AppCheckProgress>? progress, CancellationToken token)
+        TimeSpan cacheAge, IProgress<AppCheckProgress>? progress, CancellationToken token, bool preservePreferredVersion = false)
     {
         var targets = apps.Where(a => !a.IsManuallyManaged && !string.IsNullOrWhiteSpace(a.Repository)).ToArray();
         var results = new List<AppCheckResult>();
@@ -40,6 +60,7 @@ public sealed class LibraryUpdateChecker(HttpClient client, AppSettings settings
         {
             AppCheckOutcome outcome;
             string? reason = null;
+            var canRetry = false;
             try
             {
                 token.ThrowIfCancellationRequested();
@@ -52,7 +73,9 @@ public sealed class LibraryUpdateChecker(HttpClient client, AppSettings settings
                 }
                 else
                 {
-                    app.ApplyCachedRelease(selected.tag_name, selected);
+                    if (preservePreferredVersion)
+                        app.ApplyStartupVersion(new(selected.tag_name, DateTimeOffset.UtcNow, StartupVersionSource.RepositoryCache, selected));
+                    else app.ApplyCachedRelease(selected.tag_name, selected);
                     GitHubApiCache.SetCache(app.RepositorySource, app.Repository!, selected.tag_name, "", selected);
                     app.RefreshInstalledStatus();
                     outcome = AppCheckOutcome.Successful;
@@ -62,15 +85,24 @@ public sealed class LibraryUpdateChecker(HttpClient client, AppSettings settings
             { outcome = AppCheckOutcome.RateLimited; reason = "Release service rate limit reached. Try again later."; }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             { outcome = AppCheckOutcome.Cancelled; reason = "Check did not finish (cancelled or timed out)."; }
-            catch (Exception ex) { outcome = AppCheckOutcome.Failed; reason = DescribeFailure(ex); }
+            catch (Exception ex) { outcome = AppCheckOutcome.Failed; reason = DescribeFailure(ex); canRetry = IsTransient(ex); }
             if (outcome != AppCheckOutcome.Cancelled)
                 app.RepositoryCheckError = outcome == AppCheckOutcome.Successful ? null : reason;
-            results.Add(new(app.InstanceKey, outcome, app.DisplayName, reason));
+            results.Add(new(app.InstanceKey, outcome, app.DisplayName, reason) { CanRetry = canRetry });
             progress?.Report(new(results.Count, targets.Length, results[^1]));
         }
         Trace.WriteLine($"Update check: apps={targets.Length}, successful={results.Count(r => r.Outcome == AppCheckOutcome.Successful)}, requests={coordinator.RequestCount - startRequests}, elapsedMs={watch.ElapsedMilliseconds}");
         return new(results);
     }
+
+    private static bool IsTransient(Exception error) => error switch
+    {
+        ReleaseFetchException { Result.IsRateLimited: true } => false,
+        OperationCanceledException or TimeoutException => true,
+        HttpRequestException { StatusCode: null } => true,
+        HttpRequestException { StatusCode: { } status } => (int)status >= 500 || status == HttpStatusCode.RequestTimeout,
+        _ => false
+    };
 
     internal static string NoEligibleReleaseReason(GameInfo app) => string.IsNullOrWhiteSpace(app.PreferredVersion)
         ? "No eligible release was found."

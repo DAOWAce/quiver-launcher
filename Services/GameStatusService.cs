@@ -120,6 +120,9 @@ public static class GameStatusService
             {
                 if (applyCachedRelease && GitHubApiCache.TryGetCachedVersion(game.RepositorySource, game.Repository, out var cache) && cache != null)
                     game.ApplyCachedRelease(cache.Version, cache.CachedRelease);
+                else if (applyCachedRelease && GitHubApiCache.TryGetLastKnownVersion(game.RepositorySource, game.Repository, out var stale) && stale != null &&
+                    (string.IsNullOrWhiteSpace(game.PreferredVersion) || LauncherVersionService.AreVersionsEquivalent(game.PreferredVersion, stale.Version)))
+                    game.ApplyLastKnownVersion(stale.Version);
             }
             else if (forceUpdateCheck)
                 await game.CheckLatestVersionAsync(httpClient, forceCheck: true).ConfigureAwait(false);

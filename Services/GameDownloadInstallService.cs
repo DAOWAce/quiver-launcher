@@ -61,7 +61,9 @@ public static class GameDownloadInstallService
             if (latestRelease == null)
             {
                 if (GitHubApiCache.TryGetCachedVersion(game.RepositorySource, game.Repository, out var cache) &&
-                    cache?.CachedRelease != null)
+                    cache?.CachedRelease != null &&
+                    (string.IsNullOrWhiteSpace(game.LatestVersion) || ReleaseVersionIdentity.AreVersionsEquivalent(game.LatestVersion, cache.CachedRelease.tag_name)) &&
+                    (string.IsNullOrWhiteSpace(game.PreferredVersion) || ReleaseVersionIdentity.AreVersionsEquivalent(game.PreferredVersion, cache.CachedRelease.tag_name)))
                 {
                     latestRelease = cache.CachedRelease;
                 }
@@ -72,7 +74,7 @@ public static class GameDownloadInstallService
                         httpClient,
                         game.RepositorySource,
                         game.Repository,
-                        apiToken).ConfigureAwait(false);
+                        apiToken, cancellationToken: LauncherSession.OperationCancellation).ConfigureAwait(false);
 
                     // An unsuccessful request has no releases too; it is not evidence
                     // that the repository has no downloads (for any platform).

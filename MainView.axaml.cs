@@ -220,6 +220,7 @@ namespace QuiverLauncher
             }
             Banners.Configure(_session, _settingsViewModel, _gameManager.HttpClient, this, OpenGitHubApiTokenSettings);
             Library = new LibraryViewModel(_gameManager, _settingsViewModel);
+            if (_initializeOnOpen) Library.BeginInitialLoad();
             LibraryToolbar.Configure(Library, _session, OnSettingChanged);
             LibraryToolbar.AddRequested += () => ShowEntryFormOverlay(forCreate: true);
             LibraryToolbar.SearchChanged += () =>
@@ -233,7 +234,7 @@ namespace QuiverLauncher
                 else if (ShouldKeepLibraryChromeFocus())
                     LibraryPanel.Navigation.ClearLibraryCardGamepadFocus();
             };
-            _updates = new LauncherUpdateWorkflow(_gameManager, _settingsViewModel, Library, Shell, _session, _prompts, this, () => _app, _velopackUpdateService, () => ModsPanel.Workspace.RefreshAllModUpdateBadgesAsync(), game => _libraryLaunch.HandleUpdateNowAsync(this, game, preferAutoPlatform: true, allowAssetPicker: false));
+            _updates = new LauncherUpdateWorkflow(_gameManager, _settingsViewModel, Library, Shell, _session, _prompts, this, () => _app, _velopackUpdateService, () => ModsPanel.Workspace.RefreshAllModUpdateBadgesAsync(), game => _libraryLaunch.HandleUpdateNowAsync(this, game, preferAutoPlatform: true, allowAssetPicker: false, interactive: false));
             _updateChecks = new UpdateCheckCoordinator(_updates);
             _updates.CatalogsRefreshed = RefreshCatalogSources;
             _updateChecks.ProgressChanged += () =>
@@ -835,10 +836,11 @@ namespace QuiverLauncher
         private void MobileCatalogSortItem_Click(object? sender, RoutedEventArgs e) => CatalogReviewPanel.SelectSort((sender as MenuItem)?.Tag as string);
         internal async Task InitializeGamesAsync()
         {
+            Library.BeginInitialLoad();
             try
             {
                 // Startup must not wait for catalog servers, release checks, or rate-limit cooldowns.
-                await _gameManager.ReloadLibraryFromDiskAsync(allowNetwork: false);
+                await Task.Run(() => _gameManager.ReloadLibraryFromDiskAsync(allowNetwork: false), _session.Token);
                 if (_session.IsClosed)
                     return;
                 _settings = _settingsViewModel.Load();
@@ -878,6 +880,7 @@ namespace QuiverLauncher
                     if (_session.IsClosed)
                         return;
                     UpdateGameCollectionUi();
+                    Library.FailInitialLoad();
                     await ShowMessageBoxAsync($"Failed to load apps: {ex.Message}", "Load Error");
                 });
             }
@@ -885,11 +888,22 @@ namespace QuiverLauncher
 
         private async Task RefreshStartupMetadataAsync()
         {
+            async Task RefreshLibraryAsync()
+            {
+                try { await _gameManager.RefreshLoadedLibraryMetadataAsync(_session.Token); }
+                catch (OperationCanceledException) when (_session.IsClosed) { }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"Startup library refresh failed: {ex.GetType().Name}"); }
+            }
+            await Task.WhenAll(RefreshLibraryAsync(), RefreshStartupCatalogsAsync());
+        }
+
+        private async Task RefreshStartupCatalogsAsync()
+        {
             try
             {
-                await _gameManager.CatalogService.RefreshAllSourcesAsync(_gameManager.HttpClient, _settings);
+                await _gameManager.CatalogService.RefreshAllSourcesAsync(_gameManager.HttpClient, _settings, _session.Token);
                 if (_session.IsClosed) return;
-                await _gameManager.CatalogService.EnsureCommunitySourcesCachedAsync(_gameManager.HttpClient, _settings);
+                await _gameManager.CatalogService.EnsureCommunitySourcesCachedAsync(_gameManager.HttpClient, _settings, _session.Token);
                 if (_session.IsClosed) return;
                 _settingsViewModel.Save(_settings);
                 await RefreshAllCatalogPendingCountsAsync();
@@ -897,7 +911,6 @@ namespace QuiverLauncher
                 {
                     if (!_session.IsClosed) RefreshCatalogSources();
                 });
-                await _gameManager.RefreshLoadedLibraryMetadataAsync(_session.Token);
             }
             catch (OperationCanceledException) when (_session.IsClosed) { }
             catch (Exception ex)

@@ -78,7 +78,7 @@ public sealed class LibraryLaunchController
     }
 
     public Task PerformGamePrimaryActionAsync(GameInfo game, Control anchor) => _session.RunAsync(() => PerformGamePrimaryActionCoreAsync(game, anchor));
-    public Task<bool> HandleUpdateNowAsync(Control anchor, GameInfo game, bool preferAutoPlatform = false, bool allowAssetPicker = true) => _session.RunAsync(() => HandleUpdateNowCoreAsync(anchor, game, preferAutoPlatform, allowAssetPicker));
+    public Task<bool> HandleUpdateNowAsync(Control anchor, GameInfo game, bool preferAutoPlatform = false, bool allowAssetPicker = true, bool interactive = true) => _session.RunAsync(() => HandleUpdateNowCoreAsync(anchor, game, preferAutoPlatform, allowAssetPicker, interactive));
     public Task HandleSkipUpdateAsync(GameInfo game) => _session.RunAsync(() => HandleSkipUpdateCoreAsync(game));
     public Task HandleChangeVersionAsync(Control anchor, GameInfo game) => _session.RunAsync(() => HandleChangeVersionCoreAsync(anchor, game));
     public Task ShowReleaseDownloadSelectionMenuAsync(Control anchor, GameInfo game, GitHubRelease release, string? preferredVersion, string? skippedUpdateVersion) => _session.RunAsync(() => ShowReleaseDownloadSelectionMenuCoreAsync(anchor, game, release, preferredVersion, skippedUpdateVersion));
@@ -97,6 +97,7 @@ public sealed class LibraryLaunchController
 
     private async Task PerformGamePrimaryActionCoreAsync(GameInfo game, Control anchor)
     {
+        using var priority = ReleaseRequestCoordinator.PrioritizeInteractiveChecks();
         var launched = false;
         try
         {
@@ -265,12 +266,13 @@ public sealed class LibraryLaunchController
     }
 
     /// <returns>True when an install was started/completed; false when cancelled or deferred to a picker.</returns>
-    private async Task<bool> HandleUpdateNowCoreAsync(Control anchor, GameInfo game, bool preferAutoPlatform = false, bool allowAssetPicker = true)
+    private async Task<bool> HandleUpdateNowCoreAsync(Control anchor, GameInfo game, bool preferAutoPlatform = false, bool allowAssetPicker = true, bool interactive = true)
     {
+        using var priority = interactive ? ReleaseRequestCoordinator.PrioritizeInteractiveChecks() : null;
         try
         {
             game.IsLoading = true;
-            var releaseResult = await game.FetchReleasesAsync(_gameManager.HttpClient);
+            var releaseResult = await game.FetchReleasesAsync(_gameManager.HttpClient, _session.Token);
             _session.Token.ThrowIfCancellationRequested();
             var latestRelease = GameInfo.SelectLatestRelease(releaseResult.Releases, game.PreferredVersion, game.InstalledVersion, releaseResult.LatestTag);
             if (latestRelease == null)
@@ -327,11 +329,12 @@ public sealed class LibraryLaunchController
 
     private async Task HandleChangeVersionCoreAsync(Control anchor, GameInfo game)
     {
+        using var priority = ReleaseRequestCoordinator.PrioritizeInteractiveChecks();
         if (game.IsFlatpak) return;
         try
         {
             game.IsLoading = true;
-            var releaseResult = await game.FetchReleasesAsync(_gameManager.HttpClient);
+            var releaseResult = await game.FetchReleasesAsync(_gameManager.HttpClient, _session.Token);
             _session.Token.ThrowIfCancellationRequested();
             if (releaseResult.Releases.Count == 0)
             {
@@ -556,6 +559,7 @@ public sealed class LibraryLaunchController
 
     private async Task PerformSelectedGameActionCoreAsync(GameInfo game)
     {
+        using var priority = ReleaseRequestCoordinator.PrioritizeInteractiveChecks();
         var launched = false;
         try
         {

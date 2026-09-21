@@ -24,6 +24,7 @@ public partial class LibraryView : UserControl
     public LibraryNavigation Navigation { get; internal set; } = null!;
     private Thickness _contentInsets;
     private bool _updateStatusVisible;
+    private bool _showLibrary = true;
 
     public event Action<LibraryActionKind, GameInfo?>? NavigationRequested;
     private LibraryActions _actions = null!;
@@ -51,6 +52,17 @@ public partial class LibraryView : UserControl
         _session = session;
         _libraryLaunch = launch;
         _openMenu = openMenu;
+        System.ComponentModel.PropertyChangedEventHandler changed = (_, e) =>
+        {
+            if (e.PropertyName is null or nameof(LibraryViewModel.IsInitialLoading) or nameof(LibraryViewModel.IsLibraryEmpty) or nameof(LibraryViewModel.HasNoSearchMatches))
+            {
+                if (Dispatcher.UIThread.CheckAccess()) UpdateEmptyState(_showLibrary);
+                else Dispatcher.UIThread.Post(() => UpdateEmptyState(_showLibrary));
+            }
+        };
+        model.PropertyChanged += changed;
+        session.OnShutdown(() => model.PropertyChanged -= changed);
+        UpdateEmptyState(_showLibrary);
         Surface.SizeChanged += (_, _) => FitMobileLibraryCardWidth();
     }
 
@@ -85,11 +97,15 @@ public partial class LibraryView : UserControl
 
     public void UpdateEmptyState(bool showLibrary)
     {
+        _showLibrary = showLibrary;
+        var loading = showLibrary && Model.IsInitialLoading;
         var empty = showLibrary && Model.IsLibraryEmpty;
         var noMatches = showLibrary && Model.HasNoSearchMatches;
         EmptyLibraryPanel.IsVisible = empty;
         LibrarySearchNoMatchesPanel.IsVisible = noMatches;
-        LibraryContentPanel.IsVisible = showLibrary && !empty && !noMatches;
+        LibraryLoadingPanel.IsVisible = loading;
+        LoadingBar.IsActive = loading;
+        LibraryContentPanel.IsVisible = showLibrary && !loading && !empty && !noMatches;
     }
 
     public void UpdateLayoutMode()

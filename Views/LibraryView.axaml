@@ -25,7 +25,7 @@
     <services:HoverScrollText views:LibraryListRowLayout.Role="Title" Text="{Binding DisplayName}" IsActive="{Binding ShouldScrollTitle}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource ThemeText}"/>
     <services:HoverScrollText views:LibraryListRowLayout.Role="Subtitle" Text="{Binding ProjectSubtitle}" IsActive="{Binding ShouldScrollTitle}" FontSize="12" Foreground="{DynamicResource ThemeTextSecondary}"/>
     <services:HoverScrollText views:LibraryListRowLayout.Role="Status" IsActive="{Binding ShouldScrollTitle}" FontSize="12" Foreground="{DynamicResource ThemeTextSecondary}"/>
-    <services:HoverScrollText views:LibraryListRowLayout.Role="Latest" Text="{Binding LatestVersionLabel}" IsActive="{Binding ShouldScrollTitle}" FontSize="12" Foreground="{DynamicResource ThemeTextSecondary}"/>
+    <services:HoverScrollText views:LibraryListRowLayout.Role="Latest" Text="{Binding LatestVersionLabel}" ToolTip.Tip="{Binding LatestVersionToolTip}" IsActive="{Binding ShouldScrollTitle}" FontSize="12" Foreground="{DynamicResource ThemeTextSecondary}"/>
     <services:HoverScrollText views:LibraryListRowLayout.Role="Preferred" Text="{Binding PreferredVersionLabel}" IsActive="{Binding ShouldScrollTitle}" FontSize="12" Foreground="{DynamicResource ThemeTextSecondary}"/>
     <Border views:LibraryListRowLayout.Role="Tags" ClipToBounds="True">
         <ItemsControl ItemsSource="{Binding LibraryCardTags}">
@@ -469,7 +469,7 @@
 								<Run Text="Latest: "/>
 								<Run Text="{Binding LatestVersion}" Foreground="{DynamicResource ThemeTextSecondary}"/>
 							</TextBlock>
-							<services:HoverScrollText Text="{Binding LatestVersionLabel}"
+							<services:HoverScrollText Text="{Binding LatestVersionLabel}" ToolTip.Tip="{Binding LatestVersionToolTip}"
 													  IsActive="{Binding ShouldScrollTitle}"
 													  FontSize="10"
 													  Foreground="{DynamicResource ThemeTextSecondary}"
@@ -789,7 +789,7 @@
 								<Run Text="Latest: "/>
 								<Run Text="{Binding LatestVersion}" Foreground="{DynamicResource ThemeTextSecondary}"/>
 							</TextBlock>
-							<services:HoverScrollText Text="{Binding LatestVersionLabel}"
+							<services:HoverScrollText Text="{Binding LatestVersionLabel}" ToolTip.Tip="{Binding LatestVersionToolTip}"
 													  IsActive="{Binding ShouldScrollTitle}"
 													  FontSize="10"
 													  Foreground="{DynamicResource ThemeTextSecondary}"
@@ -871,6 +871,13 @@
 						</Grid>
 					</ScrollViewer>
 
+                    <StackPanel x:Name="LibraryLoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                Spacing="12" Margin="24" IsVisible="False" Focusable="False" IsHitTestVisible="False">
+                        <views:LibraryLoadingBar x:Name="LoadingBar" Width="120" Height="4" Focusable="False"
+                                                 Foreground="{DynamicResource SystemControlHighlightAccentBrush}"/>
+                        <TextBlock Text="Loading your library…" FontSize="16" Foreground="{DynamicResource ThemeTextSecondary}"
+                                   TextAlignment="Center" TextWrapping="Wrap" Focusable="False"/>
+                    </StackPanel>
 					<StackPanel x:Name="EmptyLibraryPanel"
 								HorizontalAlignment="Center"
 								VerticalAlignment="Center"

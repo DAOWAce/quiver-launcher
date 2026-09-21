@@ -128,6 +128,16 @@ namespace QuiverLauncher.Core.Services
             return false;
         }
 
+        /// <summary>Display-only lookup; callers must not treat expired data as a verified release.</summary>
+        public static bool TryGetLastKnownVersion(string? repositorySource, string? repository,
+            out GameVersionCache? cache)
+        {
+            cache = null;
+            return !string.IsNullOrWhiteSpace(repository) &&
+                TryResolveCacheEntry(repositorySource, repository, out _, out cache) &&
+                cache != null && !string.IsNullOrWhiteSpace(cache.Version);
+        }
+
         /// <summary>Legacy overload: treats repository as GitHub.</summary>
         public static bool TryGetCachedVersion(string repository, out GameVersionCache? cache) =>
             TryGetCachedVersion(RepositorySourceIds.GitHub, repository, out cache);

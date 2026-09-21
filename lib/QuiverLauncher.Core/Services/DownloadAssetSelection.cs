@@ -14,6 +14,9 @@ public static class DownloadAssetPolicy
 {
     public static bool IsAuxiliary(string name) =>
         name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+        // Only trailing, separated archive labels: app names such as Resource or SourceGame remain valid.
+        Regex.IsMatch(name, @"(?:^|[._\s-])(?:notices?|sources?|source[._\s-]code|src)\.(?:zip|7z|rar|tar(?:\.(?:gz|xz|bz2|zst))?|tgz|tbz2|txz)\z",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant) ||
         Regex.IsMatch(name, @"(?:\.(?:sha(?:1|224|256|384|512)?|md5|sig|asc|minisig|signature|debug)(?:\.txt)?$)|(?:^|[._-])(?:checksums?|sha(?:1|224|256|384|512)?sums?|md5sums?|pdb|dsym|symbols|debugsymbols|debug[._-]symbols)(?:$|[._-])",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 

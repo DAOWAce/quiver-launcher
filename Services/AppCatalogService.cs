@@ -121,19 +121,19 @@ namespace QuiverLauncher.Services
 
         public async Task<CommunityCatalogSyncResult> EnsureCommunitySourcesCachedAsync(
             HttpClient httpClient,
-            AppSettings settings)
+            AppSettings settings, CancellationToken cancellationToken = default)
         {
             settings.EnsureInitialized();
 
             var bootstrap = new CommunityCatalogBootstrap(_locationReader);
-            var syncResult = await bootstrap.SyncCommunitySourcesFromIndexAsync(httpClient, settings).ConfigureAwait(false);
+            var syncResult = await bootstrap.SyncCommunitySourcesFromIndexAsync(httpClient, settings, cancellationToken).ConfigureAwait(false);
 
             foreach (var source in settings.AppCatalogSources.Where(s => s.IsCommunityManaged && s.Enabled))
             {
                 if (HasSourceCache(source.Id))
                     continue;
 
-                await FetchSourceAsync(httpClient, source).ConfigureAwait(false);
+                await FetchSourceAsync(httpClient, source, cancellationToken).ConfigureAwait(false);
             }
 
             return syncResult;

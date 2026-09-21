@@ -375,6 +375,36 @@ public class GameDownloadInstallServiceTests
         game.Status.Should().Be(GameStatus.NotInstalled);
     }
 
+    [Fact]
+    public async Task Published_version_does_not_download_an_older_cached_release()
+    {
+        var game = new GameInfo { Name = "Index download", Repository = "index-download/" + Guid.NewGuid().ToString("N"), FolderName = "App" };
+        GitHubApiCache.SetCache(null, game.Repository!, "1.0", "", new GitHubRelease
+        {
+            tag_name = "1.0", assets = [new() { name = "old-win64.zip", browser_download_url = "https://example.com/old.zip" }]
+        }, persist: false);
+        game.ApplyStartupVersion(new("2.0", DateTimeOffset.UtcNow, StartupVersionSource.PublishedIndex));
+        var release = new GitHubRelease { tag_name = "2.0", assets =
+        [
+            new() { name = "app-win64.zip", browser_download_url = "https://example.com/new64.zip" },
+            new() { name = "app-win32.zip", browser_download_url = "https://example.com/new32.zip" }
+        ] };
+        var calls = 0;
+        using var client = new HttpClient(new StubHttpMessageHandler(request =>
+        {
+            request.RequestUri!.Host.Should().Be("api.github.com", "release details must be fetched before choosing a download");
+            calls++;
+            return new(HttpStatusCode.OK) { Content = new StringContent(request.RequestUri.AbsolutePath.EndsWith("/latest")
+                ? System.Text.Json.JsonSerializer.Serialize(release) : System.Text.Json.JsonSerializer.Serialize(new[] { release })) };
+        }));
+        var dialogs = new RecordingDialogs();
+        await GameDownloadInstallService.DownloadAndInstallAsync(game, client, Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
+            game.GetLatestRelease(), new AppSettings { Platform = TargetOS.Windows }, GameStatus.NotInstalled, dialogs);
+        calls.Should().Be(2); dialogs.LastError.Should().BeNull();
+        game.AvailableDownloads.Select(asset => asset.name).Should().Equal("app-win64.zip", "app-win32.zip");
+        game.GetLatestRelease()!.tag_name.Should().Be("2.0");
+    }
+
     private static byte[] CreateMinimalZipWithExe()
     {
         using var ms = new MemoryStream();

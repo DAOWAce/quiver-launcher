@@ -19,6 +19,40 @@ namespace QuiverLauncher.Tests;
 public class LibraryListRowTests
 {
     [AvaloniaTheory]
+    [InlineData("ListViewTemplate")]
+    [InlineData("GridViewTemplate")]
+    [InlineData("CompactGridViewTemplate")]
+    public async Task Cached_version_hint_and_tooltip_bind_in_every_library_layout(string template)
+    {
+        var view = CreateView();
+        var window = new Window { Content = view, Width = 1000, Height = 750 };
+        try
+        {
+            view.SettingsModel.ListRowHeight = 120;
+            var library = view.FindControl<LibraryView>("LibraryPanel")!;
+            var game = new GameInfo { Name = "Cached app", Repository = "fixture/cached" };
+            game.ApplyLastKnownVersion("v2.0");
+            var card = ((IDataTemplate)library.Resources[template]!).Build(game)!;
+            card.DataContext = game;
+            library.FindControl<Grid>("Surface")!.Children.Add(card);
+            window.Show(); Settle(window);
+            var labels = card.GetVisualDescendants().OfType<HoverScrollText>()
+                .Where(c => c.Text == "Latest: v2.0 (pending check)").ToArray();
+            labels.Should().NotBeEmpty();
+            foreach (var label in labels)
+                ToolTip.GetTip(label)!.ToString().Should().Contain("Verification is pending");
+            game.ApplyCachedRelease("v2.1", new() { tag_name = "v2.1" });
+            Settle(window);
+            foreach (var label in labels)
+            {
+                label.Text.Should().Be("Latest: v2.1");
+                ToolTip.GetTip(label).Should().BeNull();
+            }
+        }
+        finally { window.Close(); await view.ShutdownAsync(); }
+    }
+
+    [AvaloniaTheory]
     [InlineData(72)] [InlineData(96)] [InlineData(120)] [InlineData(180)]
     public async Task Rows_fit_metadata_actions_and_progress(int height)
     {

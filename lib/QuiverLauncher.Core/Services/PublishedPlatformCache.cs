@@ -25,6 +25,20 @@ public static class PublishedPlatformCache
     public static bool TryGet(string provider, string repository, string? preferred, out CatalogPlatformEntry? entry) =>
         Entries.TryGetValue(CatalogPlatformIndex.Key(provider, repository, preferred), out entry);
 
+    public static bool TryGet(string provider, string repository, string? preferred,
+        IEnumerable<string> sourceUrls, out CatalogPlatformEntry? entry)
+    {
+        var key = CatalogPlatformIndex.Key(provider, repository, preferred);
+        entry = sourceUrls.Distinct(StringComparer.Ordinal)
+            .Select(url => Documents.GetValueOrDefault(url))
+            .Where(document => document != null)
+            .SelectMany(document => document!.Document.Entries)
+            .Where(record => record.Key == key)
+            .OrderByDescending(record => record.ValidatedAt)
+            .Select(record => record.Metadata).FirstOrDefault();
+        return entry != null;
+    }
+
     public static void Initialize(string directory)
     {
         Documents.Clear(); Entries.Clear(); Errors.Clear(); Sessions = new();
@@ -83,6 +97,7 @@ public static class PublishedPlatformCache
             var document = PublishedPlatformDocument.Parse(Encoding.UTF8.GetString(output.ToArray()));
             if (document.GeneratedAt > DateTimeOffset.UtcNow.AddMinutes(5)) throw new JsonException();
             var stored = new Stored(url, response.Headers.ETag?.ToString(), response.Content.Headers.LastModified, document);
+            token.ThrowIfCancellationRequested();
             Apply(stored);
             if (_directory != null)
             {

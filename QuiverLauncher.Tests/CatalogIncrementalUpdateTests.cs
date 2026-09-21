@@ -48,6 +48,9 @@ public class CatalogIncrementalUpdateTests
             button.Focus().Should().BeTrue();
             row.IsGamepadFocused = true;
             list.SelectedItem = row;
+            // Focus/selection can invalidate the card template's first measure.
+            // Capture settled bounds before applying compatibility results.
+            Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
             var scroll = list.GetVisualDescendants().OfType<ScrollViewer>().First();
             var offset = scroll.Offset;
             var position = container.Bounds;

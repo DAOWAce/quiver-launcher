@@ -9,6 +9,8 @@ public class ShellNavigationRouterTests
     private sealed class Handler : IFeatureNavigationHandler
     {
         public int Moves, Confirms, Cancels;
+        public object? FocusTarget;
+        public bool SynchronizePointer(object? source) => source != null && ReferenceEquals(source, FocusTarget);
         public List<bool> Restores { get; } = [];
         public bool Navigate(NavigationDirection direction) { Moves++; return true; }
         public bool Confirm() { Confirms++; return true; }
@@ -16,6 +18,25 @@ public class ShellNavigationRouterTests
         public bool Options() => false;
         public void RestoreFocus() => RestoreFocus(true);
         public void RestoreFocus(bool bringIntoView) => Restores.Add(bringIntoView);
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Focused_banner_confirmation_respects_open_settings(bool settingsOpen)
+    {
+        var shell = new ShellViewModel { SettingsOpen = settingsOpen };
+        var navigation = new GamepadNavigationService { ActiveZone = GamepadNavigationZone.Library };
+        var features = Enum.GetValues<GamepadNavigationZone>().ToDictionary(z => z, _ => new Handler());
+        var target = new object();
+        features[GamepadNavigationZone.AnnouncementBanner].FocusTarget = target;
+        var handlers = features.ToDictionary(p => p.Key, p => (Func<IFeatureNavigationHandler>)(() => p.Value));
+        var router = new ShellNavigationRouter(shell, navigation, handlers, () => false, () => { }, () => { });
+
+        router.ConfirmFeature(true, target).Should().BeTrue();
+
+        features[GamepadNavigationZone.Settings].Confirms.Should().Be(settingsOpen ? 1 : 0);
+        features[GamepadNavigationZone.AnnouncementBanner].Confirms.Should().Be(settingsOpen ? 0 : 1);
+        features[GamepadNavigationZone.Library].Confirms.Should().Be(0);
     }
     [Theory]
     [InlineData(GamepadNavigationZone.Library)]

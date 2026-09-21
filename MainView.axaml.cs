@@ -510,7 +510,7 @@ namespace QuiverLauncher
                 return;
             if (AllowChromeActions && (_inputService?.TryHandleContextMenuConfirm() == true || _inputService?.TryHandleModalConfirm() == true || _inputService?.TryHandleComboBoxConfirm() == true || _inputService?.TryHandleMenuFlyoutConfirm() == true))
                 return;
-            if (_navigationRouter.ConfirmFeature(AllowChromeActions))
+            if (_navigationRouter.ConfirmFeature(AllowChromeActions, TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement()))
                 return;
             var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
             switch (focused)

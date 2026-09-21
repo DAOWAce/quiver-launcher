@@ -349,11 +349,12 @@ public class SettingsTextInputTests
             }
             else
             {
-                button.Focus();
+                button.Focus().Should().BeTrue();
                 window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
                 window.KeyRelease(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
             }
             Dispatcher.UIThread.RunJobs(); window.UpdateLayout();
+            view.Shell.SettingsOpen.Should().BeTrue();
             var settings = view.FindControl<SettingsView>("SettingsPanel")!;
             var token = settings.FindControl<TextBox>("GitHubTokenTextBox")!;
             settings.Navigation.GetSettingsFocusedControl(settings.Navigation.CollectSettingsFocusableControls())

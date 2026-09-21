@@ -96,12 +96,17 @@ public sealed class ShellNavigationRouter(ShellViewModel shell, GamepadNavigatio
         if (For(GamepadNavigationZone.Sidebar)?.SynchronizePointer(source) == true) return true;
         return MainZone == GamepadNavigationZone.Library && For(MainZone)?.SynchronizePointer(source) == true;
     }
-    public bool ConfirmFeature(bool allowChrome)
+    public bool ConfirmFeature(bool allowChrome, object? focusedControl = null)
     {
         if (shell.SettingsOpen) return Enter(GamepadNavigationZone.Settings)?.Confirm() ?? false;
         if (displayFilterOpen()) return Enter(GamepadNavigationZone.DisplayFilterOverlay)?.Confirm() ?? false;
         if (shell.EntryEditorOpen) return Enter(GamepadNavigationZone.EntryFormOverlay)?.Confirm() ?? false;
         if (shell.TagEditorOpen) return Enter(GamepadNavigationZone.TagEditOverlay)?.Confirm() ?? false;
+        // Tab/native keyboard focus can reach the banner without entering its
+        // controller zone. Confirm the focused banner action, not the stale zone.
+        if (allowChrome && !shell.DocumentOpen && !shell.ModDetailsOpen && !shell.CatalogDetailsOpen &&
+            focusedControl != null && For(GamepadNavigationZone.AnnouncementBanner)?.SynchronizePointer(focusedControl) == true)
+            return For(GamepadNavigationZone.AnnouncementBanner)?.Confirm() ?? false;
         return allowChrome && (For(navigation.ActiveZone)?.Confirm() ?? false);
     }
     public bool CancelFeature(bool allowChrome)

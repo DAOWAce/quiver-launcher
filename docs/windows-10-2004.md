@@ -10,11 +10,12 @@ From the repository root in PowerShell:
 
 ```powershell
 dotnet --version
-dotnet restore QuiverLauncher.Desktop/QuiverLauncher.Desktop.csproj -r win-x64
-dotnet publish QuiverLauncher.Desktop/QuiverLauncher.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishTrimmed=false -o .\artifacts\win10-2004
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\publish-win10-2004.ps1
 $env:QuiverLauncher_SKIP_UPDATES = "1"
 .\artifacts\win10-2004\QuiverLauncher.exe
 ```
+
+The helper works around a separate build-time CET failure in the SDK's compiler apphost. It copies the selected SDK's Roslyn directory to a temporary folder, removes the compiler EXE hosts from that copy, and selects the copied compiler tasks with shared compilation disabled. Roslyn then invokes its managed compiler DLL through `dotnet.exe`. The installed SDK is not modified. `ExecutionPolicy Bypass` applies only to this PowerShell process. This workaround has been checked against Roslyn's compiler-selection source but still requires a build test on the affected Windows installation.
 
 Run the `QuiverLauncher.exe` **inside the publish directory**. The published folder needs its accompanying DLLs and runtime files; keep the whole folder together. `QuiverLauncher_SKIP_UPDATES=1` keeps this local build from replacing itself with an upstream release. If you open a new PowerShell window to run the app, set that variable again in the new window.
 

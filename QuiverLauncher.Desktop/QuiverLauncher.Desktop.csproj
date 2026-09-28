@@ -15,6 +15,13 @@
 		<RuntimeIdentifiers>win-x64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
 	</PropertyGroup>
 
+	<!-- .NET 9+ marks Windows apphosts CET-compatible by default. Older Windows 10
+	     builds can fail while starting such an apphost. Limit this opt-out to the
+	     desktop executable; the managed libraries do not have an apphost. -->
+	<PropertyGroup>
+		<CETCompat>false</CETCompat>
+	</PropertyGroup>
+
 	<PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
 		<DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
 	</PropertyGroup>

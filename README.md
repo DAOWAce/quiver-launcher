@@ -289,6 +289,8 @@ dotnet run --project QuiverLauncher.Desktop/QuiverLauncher.Desktop.csproj -c Rel
 
 Requires the **.NET 10 SDK**.
 
+For Windows 10 version 2004 and Visual Studio 2022, see [building a local Windows copy](docs/windows-10-2004.md). The desktop Windows apphost in this source tree opts out of CET compatibility to address startup failures on some older Windows builds.
+
 ### Android
 
 Android uses a separate head project (`QuiverLauncher.Android`) that installs and launches **APK** release assets. Desktop binaries (.exe, AppImage, Wine/Proton) are not supported on device.
